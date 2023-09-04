@@ -89,36 +89,36 @@ fn main() -> ! {
         // -----------------------------------------------------------------------------------------
         // LCD Module
         // -----------------------------------------------------------------------------------------
-        defmt::info!("Initializing I2C comm for LCD module");
-        let (scl, sda) = (
-            gpiob.pb6.into_alternate_open_drain(&mut gpiob.crl),
-            gpiob.pb7.into_alternate_open_drain(&mut gpiob.crl),
-        );
-        let i2c = BlockingI2c::i2c1(
-            dp.I2C1,
-            (scl, sda),
-            &mut afio.mapr,
-            I2cMode::Fast {
-                frequency: 400.kHz(),
-                duty_cycle: DutyCycle::Ratio16to9,
-            },
-            clocks,
-            1000,
-            10,
-            1000,
-            1000,
-        );
+        // defmt::info!("Initializing I2C comm for LCD module");
+        // let (scl, sda) = (
+        //     gpiob.pb6.into_alternate_open_drain(&mut gpiob.crl),
+        //     gpiob.pb7.into_alternate_open_drain(&mut gpiob.crl),
+        // );
+        // let i2c = BlockingI2c::i2c1(
+        //     dp.I2C1,
+        //     (scl, sda),
+        //     &mut afio.mapr,
+        //     I2cMode::Fast {
+        //         frequency: 400.kHz(),
+        //         duty_cycle: DutyCycle::Ratio16to9,
+        //     },
+        //     clocks,
+        //     1000,
+        //     10,
+        //     1000,
+        //     1000,
+        // );
 
-        let mut lcd1602 = match LcdI2c::new(0x27, i2c, 16, 2, &mut delay) {
-            Ok(lcd) => lcd,
-            Err(e) => {
-                panic!("Error initializing LCD {:?}", e)
-            }
-        };
-        lcd1602.clear_buffer();
-        lcd1602.print_str("COOKWOK SUPREME", 0, 0, 16);
-        lcd1602.print_str("INITIALIZING", 1, 2, 14);
-        lcd1602.write_to_display(&mut delay);
+        // let mut lcd1602 = match LcdI2c::new(0x27, i2c, 16, 2, &mut delay) {
+        //     Ok(lcd) => lcd,
+        //     Err(e) => {
+        //         panic!("Error initializing LCD {:?}", e)
+        //     }
+        // };
+        // lcd1602.clear_buffer();
+        // lcd1602.print_str("COOKWOK SUPREME", 0, 0, 16);
+        // lcd1602.print_str("INITIALIZING", 1, 2, 14);
+        // lcd1602.write_to_display(&mut delay);
 
         // -----------------------------------------------------------------------------------------
         // GAS Stepper Driver Module
@@ -282,23 +282,23 @@ fn main() -> ! {
             });
 
             // Maybe ignite
-            {
-                // Pull ignition pin low on every cycle
-                ignition_trigger_pin.set_low();
-                delay.delay_ms(5_u8);
+            // {
+            //     // Pull ignition pin low on every cycle
+            //     ignition_trigger_pin.set_low();
+            //     delay.delay_ms(5_u8);
 
-                if keypad_values.ignition_state ^ keypad_values.prev_ignition_state {
-                    lcd1602.print_str("IGNITING", 1, 0, 10);
+            //     if keypad_values.ignition_state ^ keypad_values.prev_ignition_state {
+            //         lcd1602.print_str("IGNITING", 1, 0, 10);
 
-                    ignition_trigger_pin.set_high();
-                    #[cfg(feature = "agas")]
-                    {
-                        stepper.forward()?;
-                        stepper.step(INIT_GAS_FLOW_FOR_IGNITION as u16, delay)?;
-                    }
-                    delay.delay_ms(2000_u16);
-                }
-            }
+            //         ignition_trigger_pin.set_high();
+            //         #[cfg(feature = "agas")]
+            //         {
+            //             stepper.forward()?;
+            //             stepper.step(INIT_GAS_FLOW_FOR_IGNITION as u16, delay)?;
+            //         }
+            //         delay.delay_ms(2000_u16);
+            //     }
+            // }
 
             #[cfg(feature = "mtilt")]
             // Set tilt position
@@ -368,9 +368,9 @@ fn main() -> ! {
             // };
 
             // Updating display
-            if let Err(e) = io.update_display(&mut lcd1602, &mut delay) {
-                defmt::error!("Error updating display: {:?}", e);
-            };
+            // if let Err(e) = io.update_display(&mut lcd1602, &mut delay) {
+            //     defmt::error!("Error updating display: {:?}", e);
+            // };
         }
     }
 

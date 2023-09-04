@@ -14,15 +14,12 @@ use stm32f1xx_hal::{
 };
 
 #[derive(Debug, Format, PartialEq)]
-pub enum RS485State {
+enum RS485State {
     Idle,
-    Transmitting,
     Receiving,
 }
 #[derive(Debug, Clone, Format)]
 pub enum RS485Error {
-    Write,
-    NoData,
     Timeout,
 }
 
@@ -74,50 +71,42 @@ impl RS485 {
         delay: &mut impl DelayMs<u16>,
         _cs: &cortex_m::interrupt::CriticalSection,
     ) -> Result<(), RS485Error> {
-        match self.state {
-            RS485State::Receiving => self.try_read(rsp),
-            RS485State::Idle => self.send(&req, computed_rsp_len, delay),
-            RS485State::Transmitting => Ok(()),
-        }
-    }
-
-    fn send(
-        &mut self,
-        req: &[u8],
-        computed_rsp_len: u8,
-        delay: &mut impl DelayMs<u16>,
-    ) -> Result<(), RS485Error> {
-        self.begin_transmission(delay)?;
-        self.write_all(req)?;
-        self.end_transmission(delay)?;
-
         let timeout = (computed_rsp_len as u32)
             .mul(2)
             .add(4_u32.mul(4))
             .add(10)
             .max(500);
+
+        self.begin_transmission(delay)?;
+        self.write_all(req)?;
+        self.end_transmission(delay)?;
+
         self.counter.cancel();
         self.counter.start(timeout.millis());
         self.state = RS485State::Receiving;
-        Ok(())
+
+        self.try_read(rsp)
     }
 
     fn try_read(&mut self, rsp: &mut [u8]) -> Result<(), RS485Error> {
-        if self.counter.wait().is_ok() {
-            self.state = RS485State::Idle;
-            defmt::trace!("TIMED OUT");
-            self.counter.cancel();
-            Err(RS485Error::Timeout)
-        } else if self.buf_idx >= 1 {
-            defmt::trace!("TRYING TO READ SINCE RX COMPLETE, {:#02x}", self.buf);
-            self.state = RS485State::Idle;
-            self.counter.cancel();
-            let idx = self.buf_idx;
-            self.buf_idx = 0;
-            rsp[0..idx].copy_from_slice(&self.buf[0..idx]);
-            Ok(())
+        if self.state == RS485State::Receiving {
+            if self.counter.wait().is_ok() {
+                self.state = RS485State::Idle;
+                defmt::trace!("TIMED OUT");
+                self.counter.cancel();
+                Err(RS485Error::Timeout)
+            } else if self.buf_idx >= 1 {
+                defmt::trace!("TRYING TO READ SINCE RX COMPLETE, {:#02x}", self.buf);
+                self.state = RS485State::Idle;
+                self.counter.cancel();
+                let idx = self.buf_idx;
+                self.buf_idx = 0;
+                rsp[0..idx].copy_from_slice(&self.buf[0..idx]);
+                Ok(())
+            } else {
+                self.try_read(rsp)
+            }
         } else {
-            self.state = RS485State::Receiving;
             Ok(())
         }
     }
