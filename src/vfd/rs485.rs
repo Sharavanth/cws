@@ -14,15 +14,12 @@ use stm32f1xx_hal::{
 };
 
 #[derive(Debug, Format, PartialEq)]
-pub enum RS485State {
+enum RS485State {
     Idle,
-    Transmitting,
     Receiving,
 }
 #[derive(Debug, Clone, Format)]
 pub enum RS485Error {
-    Write,
-    NoData,
     Timeout,
 }
 
@@ -75,9 +72,8 @@ impl RS485 {
         _cs: &cortex_m::interrupt::CriticalSection,
     ) -> Result<(), RS485Error> {
         match self.state {
-            RS485State::Receiving => self.try_read(rsp),
-            RS485State::Idle => self.send(&req, computed_rsp_len, delay),
-            RS485State::Transmitting => Ok(()),
+            RS485State::Idle => self.send(req, computed_rsp_len, delay),
+            _ => self.try_read(rsp),
         }
     }
 
@@ -87,18 +83,20 @@ impl RS485 {
         computed_rsp_len: u8,
         delay: &mut impl DelayMs<u16>,
     ) -> Result<(), RS485Error> {
-        self.begin_transmission(delay)?;
-        self.write_all(req)?;
-        self.end_transmission(delay)?;
-
         let timeout = (computed_rsp_len as u32)
             .mul(2)
             .add(4_u32.mul(4))
             .add(10)
             .max(500);
+
+        self.begin_transmission(delay)?;
+        self.write_all(req)?;
+        self.end_transmission(delay)?;
+
         self.counter.cancel();
         self.counter.start(timeout.millis());
         self.state = RS485State::Receiving;
+
         Ok(())
     }
 

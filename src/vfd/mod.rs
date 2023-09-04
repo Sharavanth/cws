@@ -5,8 +5,8 @@ use core::ops::{Add, Div, Mul, Sub};
 use defmt::Format;
 use embedded_hal::blocking::delay::DelayMs;
 use modbus::{ModbusRTU, ModbusRTUError};
+use rs485::RS485Error;
 pub use rs485::RS485;
-use rs485::{RS485Error, RS485State};
 
 #[derive(Clone, Format)]
 pub enum VfdError {
