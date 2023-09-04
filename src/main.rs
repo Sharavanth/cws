@@ -46,8 +46,7 @@ static RS485: cortex_m::interrupt::Mutex<RefCell<Option<RS485>>> =
 unsafe fn USART2() {
     cortex_m::interrupt::free(|cs| {
         if let Some(rs485) = RS485.borrow(cs).borrow_mut().as_mut() {
-            rs485.tx_listener(cs);
-            rs485.rx_listener(cs);
+            rs485.rs485_listener(cs);
         }
     })
 }

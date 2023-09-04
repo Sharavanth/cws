@@ -1,5 +1,3 @@
-#![allow(dead_code)]
-
 pub mod rs485;
 
 use bit_field::BitField;
@@ -116,38 +114,28 @@ impl VfdModbus {
         const DATA_LEN: usize = 1;
         let (req, computed_rsp_len) = self.modbus.build_request(0x2226, 0x03, DATA_LEN as u16)?;
 
-        match rs485.poll(_cs) {
-            RS485State::Receiving => match rs485.read(_cs, &mut rsp) {
-                Ok(_) => {
-                    let mut result = [0_u16; DATA_LEN];
-                    self.modbus.check_confirmation(&req, &rsp)?;
-                    self.modbus.check_integrity(&rsp)?;
-                    self.modbus.decode(&rsp, &mut result);
+        rs485.poll(&req, &mut rsp, computed_rsp_len, delay, _cs)?;
 
-                    let drive_status_frame = result[0];
-                    self.direction = match drive_status_frame.get_bits(0..=1) {
-                        0b01 => Direction::Forward,
-                        0b10 => Direction::Reverse,
-                        0b00 => Direction::Unset,
-                        _ => Direction::NotRead,
-                    };
-                    self.drive_state = match drive_status_frame.get_bits(2..=3) {
-                        0b01 => DriveState::Ready,
-                        0b10 => DriveState::Error,
-                        _ => DriveState::NotRead,
-                    };
-                    self.output = drive_status_frame.get_bit(4);
-                    self.alarm = drive_status_frame.get_bit(5);
-                    Ok(())
-                }
-                Err(e) => Err(VfdError::RS485(e)),
-            },
-            RS485State::Idle => {
-                rs485.send(_cs, &req, computed_rsp_len, delay);
-                Ok(())
-            }
-            RS485State::Transmitting => Ok(()),
-        }
+        let mut result = [0_u16; DATA_LEN];
+        self.modbus.check_confirmation(&req, &rsp)?;
+        self.modbus.check_integrity(&rsp)?;
+        self.modbus.decode(&rsp, &mut result);
+
+        let drive_status_frame = result[0];
+        self.direction = match drive_status_frame.get_bits(0..=1) {
+            0b01 => Direction::Forward,
+            0b10 => Direction::Reverse,
+            0b00 => Direction::Unset,
+            _ => Direction::NotRead,
+        };
+        self.drive_state = match drive_status_frame.get_bits(2..=3) {
+            0b01 => DriveState::Ready,
+            0b10 => DriveState::Error,
+            _ => DriveState::NotRead,
+        };
+        self.output = drive_status_frame.get_bit(4);
+        self.alarm = drive_status_frame.get_bit(5);
+        Ok(())
     }
 
     fn set_freq(
@@ -160,21 +148,10 @@ impl VfdModbus {
         let mut rsp = [0; RESPONSE_BUF_SIZE];
         let (req, computed_rsp_len) = self.modbus.build_request(0x2001, 0x06, speed)?;
 
-        match rs485.poll(_cs) {
-            RS485State::Receiving => match rs485.read(_cs, &mut rsp) {
-                Ok(_) => {
-                    self.modbus.check_confirmation(&req, &rsp)?;
-                    self.modbus.check_integrity(&rsp)?;
-                    Ok(Some(()))
-                }
-                Err(e) => Err(VfdError::RS485(e)),
-            },
-            RS485State::Idle => {
-                rs485.send(_cs, &req, computed_rsp_len, delay);
-                Ok(None)
-            }
-            RS485State::Transmitting => Ok(None),
-        }
+        rs485.poll(&req, &mut rsp, computed_rsp_len, delay, _cs)?;
+        self.modbus.check_confirmation(&req, &rsp)?;
+        self.modbus.check_integrity(&rsp)?;
+        Ok(Some(()))
     }
     fn set_run_state(
         &mut self,
@@ -205,21 +182,10 @@ impl VfdModbus {
         let mut rsp = [0; RESPONSE_BUF_SIZE];
         let (req, computed_rsp_len) = self.modbus.build_request(0x2000, 0x06, content)?;
 
-        match rs485.poll(_cs) {
-            RS485State::Receiving => match rs485.read(_cs, &mut rsp) {
-                Ok(_) => {
-                    self.modbus.check_confirmation(&req, &rsp)?;
-                    self.modbus.check_integrity(&rsp)?;
-                    Ok(Some(()))
-                }
-                Err(e) => Err(VfdError::RS485(e)),
-            },
-            RS485State::Idle => {
-                rs485.send(_cs, &req, computed_rsp_len, delay);
-                Ok(None)
-            }
-            RS485State::Transmitting => Ok(None),
-        }
+        rs485.poll(&req, &mut rsp, computed_rsp_len, delay, _cs)?;
+        self.modbus.check_confirmation(&req, &rsp)?;
+        self.modbus.check_integrity(&rsp)?;
+        Ok(Some(()))
     }
     fn get_dc_bus_voltage(
         &mut self,
@@ -229,32 +195,20 @@ impl VfdModbus {
     ) -> Result<Option<u8>, VfdError> {
         let mut rsp = [0; RESPONSE_BUF_SIZE];
         let (req, computed_rsp_len) = self.modbus.build_request(0x2203, 0x03, 2)?;
-        match rs485.poll(_cs) {
-            RS485State::Receiving => match rs485.read(_cs, &mut rsp) {
-                Ok(_) => {
-                    defmt::info!("POLL_DC_BUS_VOLTAGE {:#02x}, {:#02x}", req, rsp);
+        rs485.poll(&req, &mut rsp, computed_rsp_len, delay, _cs)?;
+        defmt::info!("POLL_DC_BUS_VOLTAGE {:#02x}, {:#02x}", req, rsp);
 
-                    let mut result = [0_u16; 2];
-                    self.modbus.check_confirmation(&req, &rsp)?;
-                    self.modbus.check_integrity(&rsp)?;
-                    self.modbus
-                        .decode(&rsp[0..(computed_rsp_len as usize)], &mut result);
-                    let bus_voltage = (result[0] as f32)
-                        .mul(100_f32)
-                        .add(result[1] as f32)
-                        .div(100_f32);
-                    defmt::info!("POLL_DC_BUS_VOLTAGE {:#02x}, {}", result, bus_voltage);
-                    Ok(Some(bus_voltage as u8))
-                }
-                Err(RS485Error::NoData) => Ok(None),
-                Err(e) => Err(VfdError::RS485(e)),
-            },
-            RS485State::Idle => {
-                rs485.send(_cs, &req, computed_rsp_len, delay);
-                Ok(None)
-            }
-            RS485State::Transmitting => Ok(None),
-        }
+        let mut result = [0_u16; 2];
+        self.modbus.check_confirmation(&req, &rsp)?;
+        self.modbus.check_integrity(&rsp)?;
+        self.modbus
+            .decode(&rsp[0..(computed_rsp_len as usize)], &mut result);
+        let bus_voltage = (result[0] as f32)
+            .mul(100_f32)
+            .add(result[1] as f32)
+            .div(100_f32);
+        defmt::info!("POLL_DC_BUS_VOLTAGE {:#02x}, {}", result, bus_voltage);
+        Ok(Some(bus_voltage as u8))
     }
     fn get_set_frequency(
         &mut self,
@@ -264,26 +218,14 @@ impl VfdModbus {
     ) -> Result<Option<u8>, VfdError> {
         let mut rsp = [0; RESPONSE_BUF_SIZE];
         let (req, computed_rsp_len) = self.modbus.build_request(0x2102, 0x03, 1)?;
-        match rs485.poll(_cs) {
-            RS485State::Receiving => match rs485.read(_cs, &mut rsp) {
-                Ok(_) => {
-                    let mut result = [0_u16; 1];
-                    self.modbus.check_confirmation(&req, &rsp)?;
-                    self.modbus.check_integrity(&rsp)?;
-                    self.modbus.decode(&rsp, &mut result);
+        rs485.poll(&req, &mut rsp, computed_rsp_len, delay, _cs)?;
+        let mut result = [0_u16; 1];
+        self.modbus.check_confirmation(&req, &rsp)?;
+        self.modbus.check_integrity(&rsp)?;
+        self.modbus.decode(&rsp, &mut result);
 
-                    let set_freq = result[0].div_ceil(100);
-                    Ok(Some(set_freq as u8))
-                }
-                Err(RS485Error::NoData) => Ok(None),
-                Err(e) => Err(VfdError::RS485(e)),
-            },
-            RS485State::Idle => {
-                rs485.send(_cs, &req, computed_rsp_len, delay);
-                Ok(None)
-            }
-            RS485State::Transmitting => Ok(None),
-        }
+        let set_freq = result[0].div_ceil(100);
+        Ok(Some(set_freq as u8))
     }
     fn get_output_frequency(
         &mut self,
@@ -293,31 +235,19 @@ impl VfdModbus {
     ) -> Result<Option<i8>, VfdError> {
         let mut rsp = [0; RESPONSE_BUF_SIZE];
         let (req, computed_rsp_len) = self.modbus.build_request(0x2103, 0x03, 1)?;
-        match rs485.poll(_cs) {
-            RS485State::Receiving => match rs485.read(_cs, &mut rsp) {
-                Ok(_) => {
-                    let mut result = [0_u16; 1];
-                    self.modbus.check_confirmation(&req, &rsp)?;
-                    self.modbus.check_integrity(&rsp)?;
-                    self.modbus.decode(&rsp, &mut result);
+        rs485.poll(&req, &mut rsp, computed_rsp_len, delay, _cs)?;
+        let mut result = [0_u16; 1];
+        self.modbus.check_confirmation(&req, &rsp)?;
+        self.modbus.check_integrity(&rsp)?;
+        self.modbus.decode(&rsp, &mut result);
 
-                    let output_freq = result[0].div_floor(100) as u8;
-                    let output_freq = match self.direction {
-                        Direction::Forward => (output_freq.max(0)) as i8,
-                        Direction::Reverse => (output_freq.max(0).sub(0)) as i8,
-                        Direction::Unset => 0,
-                        Direction::NotRead => 0,
-                    };
-                    Ok(Some(output_freq))
-                }
-                Err(RS485Error::NoData) => Ok(None),
-                Err(e) => Err(VfdError::RS485(e)),
-            },
-            RS485State::Idle => {
-                rs485.send(_cs, &req, computed_rsp_len, delay);
-                Ok(None)
-            }
-            RS485State::Transmitting => Ok(None),
-        }
+        let output_freq = result[0].div_floor(100) as u8;
+        let output_freq = match self.direction {
+            Direction::Forward => (output_freq.max(0)) as i8,
+            Direction::Reverse => (output_freq.max(0).sub(0)) as i8,
+            Direction::Unset => 0,
+            Direction::NotRead => 0,
+        };
+        Ok(Some(output_freq))
     }
 }
