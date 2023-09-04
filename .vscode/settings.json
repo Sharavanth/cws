@@ -1,0 +1,19 @@
+{
+  "rust-analyzer.check.command": "clippy",
+  // override the default setting (`cargo check --all-targets`) which produces the following error
+  // "can't find crate for `test`" when the default compilation target is a no_std target
+  // with these changes RA will call `cargo check --bins` on save
+  "rust-analyzer.check.allTargets": false,
+  "rust-analyzer.check.extraArgs": ["--bins"],
+  "rust-analyzer.cargo.extraEnv": {
+    "RA_WORKSPACE": "${workspaceFolder}"
+  },
+
+  "rust-analyzer.inlayHints.chainingHints.enable": true,
+  "rust-analyzer.inlayHints.typeHints.enable": true,
+  "rust-analyzer.workspace.symbol.search.kind": "only_types",
+  "rust-analyzer.hover.actions.enable": true,
+  "workbench.panel.defaultLocation": "right",
+  "terminal.integrated.defaultProfile.windows": "Git Bash",
+  "rust-analyzer.linkedProjects": [".\\Cargo.toml"]
+}
